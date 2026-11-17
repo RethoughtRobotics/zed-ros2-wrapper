@@ -33,14 +33,10 @@
 
 #include "sl_logging.hpp"
 
-#ifdef FOUND_HUMBLE
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#elif defined FOUND_IRON
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#elif defined FOUND_FOXY
+#ifdef FOUND_FOXY
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #else
-#error Unsupported ROS2 distro
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #endif
 
 #include <sl/Camera.hpp>
@@ -4246,7 +4242,7 @@ bool ZedCamera::startCamera()
       << sl::toString(mZed->getCameraInformation().input_type).c_str());
   if (mSvoMode) {
     RCLCPP_INFO(
-      get_logger(), " * SVO resolution -> %dx%d",
+      get_logger(), " * SVO resolution -> %zux%zu",
       mZed->getCameraInformation().camera_configuration.resolution.width,
       mZed->getCameraInformation().camera_configuration.resolution.height);
     RCLCPP_INFO_STREAM(
@@ -8229,10 +8225,18 @@ void ZedCamera::processGeoPose()
     transformStamped.header.frame_id = mUtmAsParent ? mUtmFrameId : mMapFrameId;
     transformStamped.child_frame_id = mUtmAsParent ? mMapFrameId : mUtmFrameId;
 
-    // conversion from Transform to message
-    transformStamped.transform = mUtmAsParent ?
-      (tf2::toMsg(mMap2UtmTransf)) :
-      (tf2::toMsg(mMap2UtmTransf.inverse()));
+    {
+      const tf2::Transform src = mUtmAsParent ? mMap2UtmTransf : mMap2UtmTransf.inverse();
+      auto & dst = transformStamped.transform;
+      dst.translation.x = src.getOrigin().getX();
+      dst.translation.y = src.getOrigin().getY();
+      dst.translation.z = src.getOrigin().getZ();
+      const tf2::Quaternion q = src.getRotation();
+      dst.rotation.x = q.getX();
+      dst.rotation.y = q.getY();
+      dst.rotation.z = q.getZ();
+      dst.rotation.w = q.getW();
+    }
 
     mTfBroadcaster->sendTransform(transformStamped);
   }
